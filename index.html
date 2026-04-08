@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Don't 窗事發 —— 智慧護窗管理平台</title>
+    <title>智慧全方位防災護窗系統</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -13,6 +13,7 @@
             --success: #28a745;
             --warning: #ffc107;
             --danger: #dc3545;
+            --secondary: #6c757d;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -23,9 +24,18 @@
         }
         header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
-        h1 { color: var(--primary); }
+        h1 { color: var(--primary); margin-bottom: 15px;}
+        
+        .control-panel {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -53,37 +63,48 @@
         }
         .alert-box {
             display: none;
-            padding: 10px;
+            padding: 15px;
             background-color: var(--danger);
             color: white;
             text-align: center;
             border-radius: 8px;
             margin-bottom: 20px;
             font-weight: bold;
+            font-size: 1.2rem;
         }
         button {
             background-color: var(--primary);
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 15px;
             border-radius: 6px;
             cursor: pointer;
             font-size: 1rem;
-            width: 100%;
-            margin-top: 10px;
+            margin-top: 5px;
         }
         button:hover { background-color: #0056b3; }
+        button:disabled { background-color: var(--secondary); cursor: not-allowed; }
         
+        .btn-group { display: flex; gap: 10px; }
+        .btn-group button { flex: 1; }
+        .btn-danger { background-color: var(--danger); }
+        .btn-danger:hover { background-color: #bd2130; }
+
         /* 狀態顏色 */
-        .status-safe { color: var(--success); }
-        .status-warning { color: var(--danger); }
+        .status-safe { color: var(--success); font-weight: bold; }
+        .status-warning { color: var(--danger); font-weight: bold; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>Don't 窗事發 🛡️</h1>
-        <p>智慧全方位防災護窗系統 - 控制中樞</p>
+        <h1>智慧全方位防災護窗系統</h1>
+        
+        <div class="control-panel">
+            <button id="connect-btn">🔌 連接 Micro:bit</button>
+            <button id="disconnect-btn" disabled>🛑 斷開連接</button>
+            <span id="connection-status" style="margin-left: 10px; font-weight: bold; color: var(--secondary);">未連接</span>
+        </div>
     </header>
 
     <div id="global-alert" class="alert-box">
@@ -92,25 +113,32 @@
 
     <div class="dashboard">
         <div class="card" id="weather-card">
-            <h2>🌦️ 實時天氣 (香港天文台)</h2>
+            <h2>🌤️ 實時天氣 (香港天文台)</h2>
             <p>溫度: <span id="temp" class="data-point">--</span> °C</p>
             <p>濕度: <span id="humidity" class="data-point">--</span> %</p>
-            <p>降雨預測: <span id="rain" class="data-point">--</span></p>
-            <p>警告信號: <span id="warning-signal">無</span></p>
+        </div>
+
+        <div class="card" id="rain-card">
+            <h2>🌧️ 降雨與水位監測</h2>
+            <p>天文台降雨預測: <span id="hko-rain" class="data-point" style="font-size: 1.5rem;">--</span></p>
+            <p>即時水位 (Micro:bit): <span id="water-level" class="data-point">0</span></p>
+            <p>環境狀態: <span id="rain-status" class="status-safe">安全 (乾燥)</span></p>
         </div>
 
         <div class="card" id="aqi-card">
             <h2>💨 空氣與沙塵監測</h2>
             <p>實時空氣質素: <span id="aqi" class="data-point">良好</span></p>
             <p>環境狀態: <span id="env-status" class="status-safe">安全 (未偵測到沙塵)</span></p>
-            <button onclick="simulateBadAir()">模擬沙塵暴來襲</button>
+            <div class="btn-group">
+                <button onclick="simulateBadAir()">模擬沙塵暴</button>
+                <button onclick="stopSimulation()" class="btn-danger">停止模擬</button>
+            </div>
         </div>
 
         <div class="card" id="wind-card">
             <h2>🌪️ 實時風速 (Micro:bit)</h2>
             <p>當前風速: <span id="wind-speed" class="data-point">0</span> km/h</p>
-            <p>防護罩狀態: <span id="shield-status" class="status-safe">開啟 (待機中)</span></p>
-            <button id="connect-btn">🔌 連接 Micro:bit (USB)</button>
+            <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
         </div>
 
         <div class="card" id="maintenance-card">
@@ -125,100 +153,167 @@
         // --- 1. 獲取香港天文台 API 數據 ---
         async function fetchHKOWeather() {
             try {
-                // 獲取分區天氣報告 (包含溫濕度)
                 const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
                 const data = await res.json();
                 
-                // 更新 UI (取香港天文台總部數據)
                 document.getElementById('temp').innerText = data.temperature.data[1].value;
                 document.getElementById('humidity').innerText = data.humidity.data[0].value;
                 
-                // 檢查是否有降雨 (如有降雨數據則觸發警報)
                 if (data.rainfall && data.rainfall.data[0].max > 0) {
-                    document.getElementById('rain').innerText = "有雨 🌧️";
-                    triggerSystemAlert("偵測到降雨，防護系統啟動！");
+                    document.getElementById('hko-rain').innerText = "有雨 🌧️";
+                    triggerSystemAlert("天文台預測有雨，防護系統啟動！");
                 } else {
-                    document.getElementById('rain').innerText = "無雨";
+                    document.getElementById('hko-rain').innerText = "無雨";
                 }
             } catch (error) {
                 console.error('無法取得天文台數據:', error);
             }
         }
 
-        // --- 2. 模擬保養警報 (碰撞感應器邏輯) ---
-        let usageCount = 0;
-        const usageLimit = 20; // 測試用閾值：超過20次變色警告
+        // --- 2. 警報與模擬控制 ---
+        function triggerSystemAlert(message) {
+            const alertBox = document.getElementById('global-alert');
+            alertBox.style.display = 'block';
+            alertBox.innerText = message;
+        }
 
+        function resetSystemAlert() {
+            document.getElementById('global-alert').style.display = 'none';
+        }
+
+        function simulateBadAir() {
+            document.getElementById('aqi').innerText = "嚴重 ⚠️";
+            document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
+            document.getElementById('env-status').className = "status-warning";
+            triggerSystemAlert("沙塵濃度超標，自動關閉窗戶防護罩！");
+        }
+
+        function stopSimulation() {
+            document.getElementById('aqi').innerText = "良好";
+            document.getElementById('env-status').innerText = "安全 (未偵測到沙塵)";
+            document.getElementById('env-status').className = "status-safe";
+            resetSystemAlert();
+        }
+
+        let usageCount = 0;
         function simulateWindowUsage() {
             usageCount += 5;
             document.getElementById('usage-count').innerText = usageCount;
-
             const maintenanceCard = document.getElementById('maintenance-card');
             const msg = document.getElementById('maintenance-msg');
 
-            if (usageCount >= usageLimit) {
-                // 改變卡片顏色以作無聲警報
+            if (usageCount >= 20) {
                 maintenanceCard.style.backgroundColor = 'var(--warning)';
                 msg.innerText = "⚠️ 警告：開關過於頻繁，請檢查窗戶滑軌與機械結構！";
                 msg.style.fontWeight = "bold";
             }
         }
 
-        // --- 3. 模擬沙塵暴與空氣質素預警 ---
-        function simulateBadAir() {
-            document.getElementById('aqi').innerText = "嚴重 ⚠️";
-            document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
-            document.getElementById('env-status').className = "status-warning";
-            triggerSystemAlert("沙塵濃度超標，自動關閉窗戶！");
-        }
-
-        // --- 4. 系統全域警報觸發 ---
-        function triggerSystemAlert(message) {
-            const alertBox = document.getElementById('global-alert');
-            alertBox.style.display = 'block';
-            alertBox.innerText = message;
-            document.getElementById('shield-status').innerText = "已關閉 (防護中 🛡️)";
-            document.getElementById('shield-status').className = "status-warning";
-        }
-
-        // --- 5. Micro:bit Web Serial API 連接 (讀取風速) ---
+        // --- 3. Micro:bit Web Serial API (全域連線控制) ---
         let port;
-        document.getElementById('connect-btn').addEventListener('click', async () => {
-            try {
-                // 請求用戶選擇串列埠 (Micro:bit)
-                port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 115200 }); // Micro:bit 預設鮑率
-                alert("Micro:bit 連接成功！");
-                
-                const textDecoder = new TextDecoderStream();
-                const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-                const reader = textDecoder.readable.getReader();
+        let reader;
+        let keepReading = false;
 
-                // 持續讀取 Micro:bit 傳來的數據
-                while (true) {
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const statusText = document.getElementById('connection-status');
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                keepReading = true;
+                statusText.innerText = "已連接 🟢";
+                statusText.style.color = "var(--success)";
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                
+                readSerialData(); // 開始讀取數據
+            } catch (error) {
+                console.error('Serial 連接失敗:', error);
+                alert("連接失敗。請確保已接上 Micro:bit。");
+            }
+        });
+
+        disconnectBtn.addEventListener('click', async () => {
+            keepReading = false;
+            if (reader) {
+                await reader.cancel();
+            }
+            if (port) {
+                await port.close();
+            }
+            statusText.innerText = "未連接 🔴";
+            statusText.style.color = "var(--secondary)";
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            
+            // 斷開時數值歸零
+            document.getElementById('wind-speed').innerText = "0";
+            document.getElementById('water-level').innerText = "0";
+        });
+
+        async function readSerialData() {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+            reader = textDecoder.readable.getReader();
+            let buffer = "";
+
+            try {
+                while (keepReading) {
                     const { value, done } = await reader.read();
-                    if (done) { reader.releaseLock(); break; }
+                    if (done) break;
                     
-                    // 假設 Micro:bit 印出風速數值 (例如 "65\r\n")
-                    let windSpeed = parseInt(value.trim());
-                    if (!isNaN(windSpeed)) {
-                        document.getElementById('wind-speed').innerText = windSpeed;
-                        // 風速超過 63km/h (八號風球標準) 觸發關窗
-                        if (windSpeed > 63) {
-                            triggerSystemAlert("風速達到強風級別，物理盾牌已啟動！");
+                    buffer += value;
+                    let lines = buffer.split('\n');
+                    buffer = lines.pop(); // 保留最後一行未完成的數據
+
+                    for (let line of lines) {
+                        line = line.trim();
+                        // 預期 MakeCode 傳來的格式為 "名稱:數值"，例如 "wind:45" 或 "water:300"
+                        if (line.includes(':')) {
+                            let parts = line.split(':');
+                            let key = parts[0].trim();
+                            let val = parseInt(parts[1].trim());
+
+                            if (key === 'wind' && !isNaN(val)) {
+                                document.getElementById('wind-speed').innerText = val;
+                                if (val > 63) {
+                                    document.getElementById('wind-status').innerText = "危險 (強風)";
+                                    document.getElementById('wind-status').className = "status-warning";
+                                    triggerSystemAlert("風速達到強風級別，物理盾牌已啟動！");
+                                } else {
+                                    document.getElementById('wind-status').innerText = "安全 (微風)";
+                                    document.getElementById('wind-status').className = "status-safe";
+                                }
+                            }
+                            
+                            if (key === 'water' && !isNaN(val)) {
+                                document.getElementById('water-level').innerText = val;
+                                // 假設水位數值超過 500 代表有水/下雨
+                                if (val > 500) {
+                                    document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
+                                    document.getElementById('rain-status').className = "status-warning";
+                                    triggerSystemAlert("感應器偵測到水分，防護系統啟動！");
+                                } else {
+                                    document.getElementById('rain-status').innerText = "安全 (乾燥)";
+                                    document.getElementById('rain-status').className = "status-safe";
+                                }
+                            }
                         }
                     }
                 }
             } catch (error) {
-                console.error('Serial 連接失敗:', error);
-                alert("連接失敗。請確保使用 Chrome 瀏覽器並已接上 Micro:bit。");
+                console.error("讀取中斷", error);
+            } finally {
+                reader.releaseLock();
             }
-        });
+        }
 
         // 網頁載入時執行
         window.onload = () => {
             fetchHKOWeather();
-            // 每 10 分鐘更新一次天氣
             setInterval(fetchHKOWeather, 600000); 
         };
     </script>
