@@ -99,7 +99,6 @@
 
     <header>
         <h1>智慧全方位防災護窗系統</h1>
-        
         <div class="control-panel">
             <button id="connect-btn">🔌 連接 Micro:bit</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
@@ -113,7 +112,7 @@
 
     <div class="dashboard">
         <div class="card" id="weather-card">
-            <h2>🌤️ 實時天氣 (香港天文台)</h2>
+            <h2>🌦️ 實時天氣 (香港天文台)</h2>
             <p>溫度: <span id="temp" class="data-point">--</span> °C</p>
             <p>濕度: <span id="humidity" class="data-point">--</span> %</p>
         </div>
@@ -136,9 +135,10 @@
         </div>
 
         <div class="card" id="wind-card">
-            <h2>🌪️ 實時風速 (Micro:bit)</h2>
+            <h2>🌪️ 實時風速</h2>
             <p>當前風速: <span id="wind-speed" class="data-point">0</span> km/h</p>
             <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
+            <p>強風預警防禦: <span id="shield-status" class="status-safe">已開啟 (待機)</span></p>
         </div>
 
         <div class="card" id="maintenance-card">
@@ -150,12 +150,11 @@
     </div>
 
     <script>
-        // --- 1. 獲取香港天文台 API 數據 ---
+        // --- 1. 獲取香港天文台 API ---
         async function fetchHKOWeather() {
             try {
                 const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
                 const data = await res.json();
-                
                 document.getElementById('temp').innerText = data.temperature.data[1].value;
                 document.getElementById('humidity').innerText = data.humidity.data[0].value;
                 
@@ -170,14 +169,21 @@
             }
         }
 
-        // --- 2. 警報與模擬控制 ---
+        // --- 2. 警報與防護罩邏輯 ---
         function triggerSystemAlert(message) {
-            const alertBox = document.getElementById('global-alert');
-            alertBox.style.display = 'block';
-            alertBox.innerText = message;
+            document.getElementById('global-alert').style.display = 'block';
+            document.getElementById('global-alert').innerText = message;
+            
+            // 更新護罩狀態為「關閉 (防護中)」
+            const shieldStatus = document.getElementById('shield-status');
+            shieldStatus.innerText = "已關閉 (防護中 🛡️)";
+            shieldStatus.className = "status-warning";
         }
 
-        function resetSystemAlert() {
+        function resetShieldStatus() {
+            const shieldStatus = document.getElementById('shield-status');
+            shieldStatus.innerText = "已開啟 (待機)";
+            shieldStatus.className = "status-safe";
             document.getElementById('global-alert').style.display = 'none';
         }
 
@@ -192,28 +198,21 @@
             document.getElementById('aqi').innerText = "良好";
             document.getElementById('env-status').innerText = "安全 (未偵測到沙塵)";
             document.getElementById('env-status').className = "status-safe";
-            resetSystemAlert();
+            resetShieldStatus();
         }
 
         let usageCount = 0;
         function simulateWindowUsage() {
             usageCount += 5;
             document.getElementById('usage-count').innerText = usageCount;
-            const maintenanceCard = document.getElementById('maintenance-card');
-            const msg = document.getElementById('maintenance-msg');
-
             if (usageCount >= 20) {
-                maintenanceCard.style.backgroundColor = 'var(--warning)';
-                msg.innerText = "⚠️ 警告：開關過於頻繁，請檢查窗戶滑軌與機械結構！";
-                msg.style.fontWeight = "bold";
+                document.getElementById('maintenance-card').style.backgroundColor = 'var(--warning)';
+                document.getElementById('maintenance-msg').innerText = "⚠️ 警告：開關過於頻繁，請進行保養！";
             }
         }
 
-        // --- 3. Micro:bit Web Serial API (全域連線控制) ---
-        let port;
-        let reader;
-        let keepReading = false;
-
+        // --- 3. Micro:bit 連接邏輯 ---
+        let port, reader, keepReading = false;
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
         const statusText = document.getElementById('connection-status');
@@ -222,100 +221,71 @@
             try {
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
-                
                 keepReading = true;
                 statusText.innerText = "已連接 🟢";
                 statusText.style.color = "var(--success)";
                 connectBtn.disabled = true;
                 disconnectBtn.disabled = false;
-                
-                readSerialData(); // 開始讀取數據
-            } catch (error) {
-                console.error('Serial 連接失敗:', error);
-                alert("連接失敗。請確保已接上 Micro:bit。");
-            }
+                readSerialData();
+            } catch (error) { alert("連接失敗。"); }
         });
 
         disconnectBtn.addEventListener('click', async () => {
             keepReading = false;
-            if (reader) {
-                await reader.cancel();
-            }
-            if (port) {
-                await port.close();
-            }
+            if (reader) await reader.cancel();
+            if (port) await port.close();
             statusText.innerText = "未連接 🔴";
             statusText.style.color = "var(--secondary)";
             connectBtn.disabled = false;
             disconnectBtn.disabled = true;
-            
-            // 斷開時數值歸零
-            document.getElementById('wind-speed').innerText = "0";
-            document.getElementById('water-level').innerText = "0";
+            resetShieldStatus();
         });
 
         async function readSerialData() {
             const textDecoder = new TextDecoderStream();
-            const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+            port.readable.pipeTo(textDecoder.writable);
             reader = textDecoder.readable.getReader();
             let buffer = "";
 
-            try {
-                while (keepReading) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    
-                    buffer += value;
-                    let lines = buffer.split('\n');
-                    buffer = lines.pop(); // 保留最後一行未完成的數據
+            while (keepReading) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += value;
+                let lines = buffer.split('\n');
+                buffer = lines.pop();
 
-                    for (let line of lines) {
-                        line = line.trim();
-                        // 預期 MakeCode 傳來的格式為 "名稱:數值"，例如 "wind:45" 或 "water:300"
-                        if (line.includes(':')) {
-                            let parts = line.split(':');
-                            let key = parts[0].trim();
-                            let val = parseInt(parts[1].trim());
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.includes(':')) {
+                        let [key, valStr] = line.split(':');
+                        let val = parseInt(valStr);
 
-                            if (key === 'wind' && !isNaN(val)) {
-                                document.getElementById('wind-speed').innerText = val;
-                                if (val > 63) {
-                                    document.getElementById('wind-status').innerText = "危險 (強風)";
-                                    document.getElementById('wind-status').className = "status-warning";
-                                    triggerSystemAlert("風速達到強風級別，物理盾牌已啟動！");
-                                } else {
-                                    document.getElementById('wind-status').innerText = "安全 (微風)";
-                                    document.getElementById('wind-status').className = "status-safe";
-                                }
+                        if (key === 'wind') {
+                            document.getElementById('wind-speed').innerText = val;
+                            if (val > 63) { // 模擬強風閾值
+                                document.getElementById('wind-status').innerText = "危險 (強風)";
+                                document.getElementById('wind-status').className = "status-warning";
+                                triggerSystemAlert("風速達到強風級別，物理盾牌已啟動！");
+                            } else {
+                                document.getElementById('wind-status').innerText = "安全 (微風)";
+                                document.getElementById('wind-status').className = "status-safe";
+                                // 若風速回落且無其他警報，可在此考慮是否自動重置，或維持手動重置
                             }
-                            
-                            if (key === 'water' && !isNaN(val)) {
-                                document.getElementById('water-level').innerText = val;
-                                // 假設水位數值超過 500 代表有水/下雨
-                                if (val > 500) {
-                                    document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
-                                    document.getElementById('rain-status').className = "status-warning";
-                                    triggerSystemAlert("感應器偵測到水分，防護系統啟動！");
-                                } else {
-                                    document.getElementById('rain-status').innerText = "安全 (乾燥)";
-                                    document.getElementById('rain-status').className = "status-safe";
-                                }
+                        }
+                        if (key === 'water') {
+                            document.getElementById('water-level').innerText = val;
+                            if (val > 500) {
+                                document.getElementById('rain-status').innerText = "危險 (積水)";
+                                document.getElementById('rain-status').className = "status-warning";
+                                triggerSystemAlert("偵測到積水，防護系統啟動！");
                             }
                         }
                     }
                 }
-            } catch (error) {
-                console.error("讀取中斷", error);
-            } finally {
-                reader.releaseLock();
             }
         }
 
-        // 網頁載入時執行
-        window.onload = () => {
-            fetchHKOWeather();
-            setInterval(fetchHKOWeather, 600000); 
-        };
+        window.onload = () => { fetchHKOWeather(); setInterval(fetchHKOWeather, 600000); };
     </script>
 </body>
 </html>
