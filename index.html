@@ -88,33 +88,61 @@
     </div>
 
     <script>
-        function triggerSystemAlert(message) {
-            document.getElementById('global-alert').style.display = 'block';
-            document.getElementById('global-alert').innerText = message;
-            document.getElementById('shield-status').innerText = "已關閉 (防護中 🛡️)";
-            document.getElementById('shield-status').className = "status-warning";
+        // --- 全域危險狀態追蹤 ---
+        let isWindDanger = false;
+        let isDustDanger = false;
+
+        // --- 統一的警報狀態管理器 ---
+        function updateAlertStatus() {
+            const alertBox = document.getElementById('global-alert');
+            const shieldStatus = document.getElementById('shield-status');
+
+            if (isWindDanger && isDustDanger) {
+                // 雙重災難同時發生
+                alertBox.style.display = 'block';
+                alertBox.innerText = "🚨 雙重警報：強風與沙塵濃度皆超標，物理盾牌維持關閉！";
+                shieldStatus.innerText = "已關閉 (防護中 🛡️)";
+                shieldStatus.className = "status-warning";
+            } else if (isWindDanger) {
+                // 只有強風
+                alertBox.style.display = 'block';
+                alertBox.innerText = "🌪️ 強風警報：物理盾牌已自動關閉！";
+                shieldStatus.innerText = "已關閉 (防護中 🛡️)";
+                shieldStatus.className = "status-warning";
+            } else if (isDustDanger) {
+                // 只有沙塵暴 (僅靠按鈕觸發)
+                alertBox.style.display = 'block';
+                alertBox.innerText = "⚠️ 沙塵濃度超標，自動關閉窗戶防護罩！";
+                shieldStatus.innerText = "已關閉 (防護中 🛡️)";
+                shieldStatus.className = "status-warning";
+            } else {
+                // 兩者都安全
+                alertBox.style.display = 'none';
+                shieldStatus.innerText = "已開啟 (待機)";
+                shieldStatus.className = "status-safe";
+            }
         }
 
-        function resetSystemAlert() {
-            document.getElementById('global-alert').style.display = 'none';
-            document.getElementById('shield-status').innerText = "已開啟 (待機)";
-            document.getElementById('shield-status').className = "status-safe";
-        }
-
+        // --- 沙塵暴模擬按鈕控制 ---
         function simulateBadAir() {
             document.getElementById('aqi').innerText = "嚴重 ⚠️";
             document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
             document.getElementById('env-status').className = "status-warning";
-            triggerSystemAlert("⚠️ 沙塵濃度超標，自動關閉窗戶防護罩！");
+            
+            isDustDanger = true; // 鎖定沙塵暴狀態為危險
+            updateAlertStatus(); // 刷新警報畫面
         }
 
         function stopSimulation() {
             document.getElementById('aqi').innerText = "良好";
             document.getElementById('env-status').innerText = "安全";
             document.getElementById('env-status').className = "status-safe";
-            resetSystemAlert(); 
+            
+            isDustDanger = false; // 解除沙塵暴危險
+            updateAlertStatus(); // 刷新警報畫面
         }
 
+        // --- 窗戶保養模擬 ---
         let usageCount = 0;
         function simulateWindowUsage() {
             usageCount += 5;
@@ -125,6 +153,7 @@
             }
         }
 
+        // --- 天文台 API ---
         async function fetchHKOWeather() {
             try {
                 const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
@@ -135,6 +164,7 @@
             } catch (e) { console.error(e); }
         }
 
+        // --- Micro:bit 連接與實時風速處理 ---
         let port, reader, keepReading = false;
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
@@ -158,7 +188,9 @@
             document.getElementById('connection-status').innerText = "未連接 🔴";
             connectBtn.disabled = false;
             disconnectBtn.disabled = true;
-            resetSystemAlert();
+            
+            isWindDanger = false; // 斷開連接時，解除強風危險
+            updateAlertStatus(); 
         });
 
         async function readSerialData() {
@@ -181,30 +213,30 @@
                         let val = parseInt(valStr.trim());
 
                         if (key === 'wind' && !isNaN(val)) {
-                            // 1. 顯示 P2 的原始數值 (0-1023)
+                            // 更新網頁顯示數值
                             document.getElementById('wind-raw').innerText = val;
-                            
-                            // 2. 換算並顯示 km/h (讓畫面更專業)
                             let kmh = Math.round((val / 1023) * 100);
                             document.getElementById('wind-speed').innerText = kmh;
                             
-                            // 3. 判斷邏輯：直接對應 Micro:bit 的 "> 130"
+                            // 判斷風速是否超標 (大於 130)
                             if (val > 130) {
                                 document.getElementById('wind-status').innerText = "危險 (強風)";
                                 document.getElementById('wind-status').className = "status-warning";
-                                triggerSystemAlert("🌪️ 強風警報：物理盾牌已自動關閉！");
+                                isWindDanger = true; // 鎖定強風狀態為危險
                             } else {
                                 document.getElementById('wind-status').innerText = "安全 (微風)";
                                 document.getElementById('wind-status').className = "status-safe";
-                                if (document.getElementById('aqi').innerText === "良好") {
-                                    resetSystemAlert();
-                                }
+                                isWindDanger = false; // 解除強風危險
                             }
+                            
+                            // 每次收到風速數據後，統一交給狀態管理器來決定要顯示什麼警報
+                            updateAlertStatus();
                         }
                     }
                 }
             }
         }
+
         window.onload = fetchHKOWeather;
     </script>
 </body>
