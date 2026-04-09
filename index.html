@@ -1,43 +1,211 @@
-let windValue = 0
-let isShieldClosed = false
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧全方位防災護窗系統</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --primary: #007bff;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --secondary: #6c757d;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
+        header { text-align: center; margin-bottom: 20px; }
+        h1 { color: var(--primary); }
+        .control-panel { background-color: #e9ecef; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 20px; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card h2 { margin-top: 0; font-size: 1.2rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
+        .data-point { font-size: 2rem; font-weight: bold; margin: 10px 0; color: var(--primary); }
+        .data-sub { font-size: 1.2rem; font-weight: bold; color: var(--secondary); }
+        .alert-box { display: none; padding: 15px; background-color: var(--danger); color: white; text-align: center; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 1.2rem; }
+        button { background-color: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-top: 5px; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: var(--secondary); cursor: not-allowed; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-danger { background-color: var(--danger); }
+        .status-safe { color: var(--success); font-weight: bold; }
+        .status-warning { color: var(--danger); font-weight: bold; }
+    </style>
+</head>
+<body>
 
-// 初始化
-serial.redirectToUSB()
-wuKong.stopAllMotor()
-basic.showIcon(IconNames.Happy)
+    <header>
+        <h1>智慧全方位防災護窗系統</h1>
+        <div class="control-panel">
+            <button id="connect-btn">🔌 連接 Micro:bit</button>
+            <button id="disconnect-btn" disabled>🛑 斷開連接</button>
+            <span id="connection-status" style="margin-left: 10px; font-weight: bold; color: var(--secondary);">未連接</span>
+        </div>
+    </header>
 
-// B 鍵手動控制
-input.onButtonPressed(Button.B, function () {
-    if (isShieldClosed == false) {
-        basic.showIcon(IconNames.No)
-        wuKong.setMotorSpeed(wuKong.MotorList.M1, 40)
-        basic.pause(4500)
-        wuKong.stopAllMotor()
-        isShieldClosed = true
-    } else {
-        basic.showIcon(IconNames.Yes)
-        wuKong.setMotorSpeed(wuKong.MotorList.M1, -40)
-        basic.pause(4500)
-        wuKong.stopAllMotor()
-        isShieldClosed = false
-    }
-})
+    <div id="global-alert" class="alert-box"></div>
 
-basic.forever(function () {
-    // 直接讀取 P2 原始數值 (0-1023)
-    windValue = pins.analogReadPin(AnalogReadWritePin.P2)
-    
-    // 直接將 P2 數值傳送給 Web App (網頁端會顯示並自動換算)
-    serial.writeValue("wind", windValue)
+    <div class="dashboard">
+        <div class="card">
+            <h2>🌦️ 實時天氣 (香港天文台)</h2>
+            <p>溫度: <span id="temp" class="data-point">--</span> °C</p>
+            <p>濕度: <span id="humidity" class="data-point">--</span> %</p>
+        </div>
 
-    // 自動控制：當 P2數值 > 130
-    if (windValue > 130 && isShieldClosed == false) {
-        basic.showIcon(IconNames.No)
-        wuKong.setMotorSpeed(wuKong.MotorList.M1, 40)
-        basic.pause(4500)
-        wuKong.stopAllMotor()
-        isShieldClosed = true
-    }
-    
-    basic.pause(500)
-})
+        <div class="card">
+            <h2>🌧️ 降雨與水位監測</h2>
+            <p>天文台預測: <span id="hko-rain" class="data-point" style="font-size: 1.5rem;">--</span></p>
+            <p>即時水位 (P1): <span id="water-level" class="data-point">0</span></p>
+            <p>狀態: <span id="rain-status" class="status-safe">安全</span></p>
+        </div>
+
+        <div class="card">
+            <h2>💨 空氣與沙塵監測</h2>
+            <p>空氣質素: <span id="aqi" class="data-point">良好</span></p>
+            <p>狀態: <span id="env-status" class="status-safe">安全</span></p>
+            <div class="btn-group">
+                <button onclick="simulateBadAir()">模擬沙塵暴</button>
+                <button onclick="stopSimulation()" class="btn-danger">停止模擬</button>
+            </div>
+        </div>
+
+        <div class="card" id="wind-card">
+            <h2>🌪️ 實時風速</h2>
+            <p>P2 感應器數值: <span id="wind-raw" class="data-point">0</span></p>
+            <p>換算風速: <span id="wind-speed" class="data-sub">0</span> km/h</p>
+            <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
+            <p>強風預警防禦: <span id="shield-status" class="status-safe">已開啟 (待機)</span></p>
+        </div>
+
+        <div class="card" id="maintenance-card">
+            <h2>⚙️ 系統保養報告 (週報)</h2>
+            <p>本週開關次數: <span id="usage-count" class="data-point">0</span> 次</p>
+            <p id="maintenance-msg">系統狀態良好。</p>
+            <button onclick="simulateWindowUsage()">模擬開關 (+5)</button>
+        </div>
+    </div>
+
+    <script>
+        function triggerSystemAlert(message) {
+            document.getElementById('global-alert').style.display = 'block';
+            document.getElementById('global-alert').innerText = message;
+            document.getElementById('shield-status').innerText = "已關閉 (防護中 🛡️)";
+            document.getElementById('shield-status').className = "status-warning";
+        }
+
+        function resetSystemAlert() {
+            document.getElementById('global-alert').style.display = 'none';
+            document.getElementById('shield-status').innerText = "已開啟 (待機)";
+            document.getElementById('shield-status').className = "status-safe";
+        }
+
+        function simulateBadAir() {
+            document.getElementById('aqi').innerText = "嚴重 ⚠️";
+            document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
+            document.getElementById('env-status').className = "status-warning";
+            triggerSystemAlert("⚠️ 沙塵濃度超標，自動關閉窗戶防護罩！");
+        }
+
+        function stopSimulation() {
+            document.getElementById('aqi').innerText = "良好";
+            document.getElementById('env-status').innerText = "安全";
+            document.getElementById('env-status').className = "status-safe";
+            resetSystemAlert(); 
+        }
+
+        let usageCount = 0;
+        function simulateWindowUsage() {
+            usageCount += 5;
+            document.getElementById('usage-count').innerText = usageCount;
+            if (usageCount >= 20) {
+                document.getElementById('maintenance-card').style.backgroundColor = 'var(--warning)';
+                document.getElementById('maintenance-msg').innerText = "⚠️ 警告：開關過於頻繁，請進行保養！";
+            }
+        }
+
+        async function fetchHKOWeather() {
+            try {
+                const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
+                const data = await res.json();
+                document.getElementById('temp').innerText = data.temperature.data[1].value;
+                document.getElementById('humidity').innerText = data.humidity.data[0].value;
+                document.getElementById('hko-rain').innerText = (data.rainfall && data.rainfall.data[0].max > 0) ? "有雨 🌧️" : "無雨";
+            } catch (e) { console.error(e); }
+        }
+
+        let port, reader, keepReading = false;
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                keepReading = true;
+                document.getElementById('connection-status').innerText = "已連接 🟢";
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                readSerialData();
+            } catch (e) { alert("連接失敗，請確認 USB 已接上。"); }
+        });
+
+        disconnectBtn.addEventListener('click', async () => {
+            keepReading = false;
+            if (reader) await reader.cancel();
+            if (port) await port.close();
+            document.getElementById('connection-status').innerText = "未連接 🔴";
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            resetSystemAlert();
+        });
+
+        async function readSerialData() {
+            const textDecoder = new TextDecoderStream();
+            port.readable.pipeTo(textDecoder.writable);
+            reader = textDecoder.readable.getReader();
+            let buffer = "";
+
+            while (keepReading) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += value;
+                let lines = buffer.split('\n');
+                buffer = lines.pop(); 
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.includes(':')) {
+                        let [key, valStr] = line.split(':');
+                        let val = parseInt(valStr.trim());
+
+                        if (key === 'wind' && !isNaN(val)) {
+                            // 1. 顯示 P2 的原始數值 (0-1023)
+                            document.getElementById('wind-raw').innerText = val;
+                            
+                            // 2. 換算並顯示 km/h (讓畫面更專業)
+                            let kmh = Math.round((val / 1023) * 100);
+                            document.getElementById('wind-speed').innerText = kmh;
+                            
+                            // 3. 判斷邏輯：直接對應 Micro:bit 的 "> 130"
+                            if (val > 130) {
+                                document.getElementById('wind-status').innerText = "危險 (強風)";
+                                document.getElementById('wind-status').className = "status-warning";
+                                triggerSystemAlert("🌪️ 強風警報：物理盾牌已自動關閉！");
+                            } else {
+                                document.getElementById('wind-status').innerText = "安全 (微風)";
+                                document.getElementById('wind-status').className = "status-safe";
+                                if (document.getElementById('aqi').innerText === "良好") {
+                                    resetSystemAlert();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        window.onload = fetchHKOWeather;
+    </script>
+</body>
+</html>
