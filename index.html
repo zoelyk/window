@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧全方位防災護窗系統 v3.1</title>
+    <title>智慧全方位防災護窗系統 v4.0</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -26,24 +26,12 @@
         .data-point { font-size: 2rem; font-weight: bold; margin: 10px 0; color: var(--primary); }
         .data-sub { font-size: 1.2rem; font-weight: bold; color: var(--secondary); }
         
-        /* 專屬卡片警報設計 */
         .local-alert { 
-            visibility: hidden; 
-            opacity: 0; 
-            margin-top: auto; 
-            padding: 10px; 
-            background-color: var(--danger); 
-            color: white; 
-            text-align: center; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            font-size: 1rem;
-            transition: opacity 0.3s ease;
+            visibility: hidden; opacity: 0; margin-top: auto; padding: 10px; 
+            background-color: var(--danger); color: white; text-align: center; 
+            border-radius: 8px; font-weight: bold; font-size: 1rem; transition: opacity 0.3s ease;
         }
-        .local-alert.show {
-            visibility: visible;
-            opacity: 1;
-        }
+        .local-alert.show { visibility: visible; opacity: 1; }
 
         button { background-color: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-top: 5px; }
         button:hover { background-color: #0056b3; }
@@ -52,12 +40,15 @@
         .btn-danger { background-color: var(--danger); }
         .status-safe { color: var(--success); font-weight: bold; }
         .status-warning { color: var(--danger); font-weight: bold; }
+        
+        /* 設備狀態特別標示 */
+        .device-status { padding: 5px 10px; border-radius: 5px; background-color: #f8f9fa; display: inline-block; margin-top: 5px; border: 1px solid #dee2e6; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>智慧全方位防災護窗系統 <span class="version-tag">v3.1</span></h1>
+        <h1>智慧全方位防災護窗系統 <span class="version-tag">v4.0</span></h1>
         <div class="control-panel">
             <button id="connect-btn">🔌 連接 Micro:bit</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
@@ -74,20 +65,21 @@
 
         <div class="card">
             <h2>🌧️ 降雨與水位監測</h2>
-            <p>天文台預測: <span id="hko-rain" class="data-point" style="font-size: 1.5rem;">--</span></p>
-            <p>即時水位 (P1): <span id="water-level" class="data-point">0</span></p>
-            <p>狀態: <span id="rain-status" class="status-safe">安全</span></p>
+            <p>P1 感應器數值: <span id="water-level" class="data-point">0</span></p>
+            <p>環境狀態: <span id="rain-status" class="status-safe">安全 (乾燥)</span></p>
+            <div class="device-status">室內窗戶: <span class="window-status status-safe">已開啟 (通風)</span></div>
         </div>
 
         <div class="card">
             <h2>💨 空氣與沙塵監測</h2>
             <p>空氣質素: <span id="aqi" class="data-point">良好</span></p>
-            <p>狀態: <span id="env-status" class="status-safe">安全</span></p>
+            <p>環境狀態: <span id="env-status" class="status-safe">安全</span></p>
+            <div class="device-status">室內窗戶: <span class="window-status status-safe">已開啟 (通風)</span></div>
             <div class="btn-group">
                 <button onclick="simulateBadAir()">模擬沙塵暴</button>
                 <button onclick="stopSimulation()" class="btn-danger">停止模擬</button>
             </div>
-            <div id="dust-alert" class="local-alert">⚠️ 沙塵濃度超標，自動關閉防護罩！</div>
+            <div id="dust-alert" class="local-alert">⚠️ 沙塵濃度超標，自動關閉窗戶！</div>
         </div>
 
         <div class="card" id="wind-card">
@@ -95,7 +87,7 @@
             <p>P2 感應器數值: <span id="wind-raw" class="data-point">0</span></p>
             <p>換算風速: <span id="wind-speed" class="data-sub">0</span> km/h</p>
             <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
-            <p>強風預警防禦: <span id="shield-status" class="status-safe">已開啟 (待機)</span></p>
+            <div class="device-status">物理盾牌: <span id="shield-status" class="status-safe">已開啟 (待機)</span></div>
         </div>
 
         <div class="card" id="maintenance-card">
@@ -108,46 +100,57 @@
 
     <script>
         // ==========================================
-        // 核心邏輯：護罩狀態同步管理器
+        // 核心邏輯：設備狀態分離管理器
         // ==========================================
         let isWindDanger = false;
         let isDustDanger = false;
+        let isRainDanger = false;
 
-        function updateShieldStatus() {
+        function updateDevicesStatus() {
+            // 1. 防護罩邏輯 (只受強風影響)
             const shieldStatus = document.getElementById('shield-status');
-            // 只要風速超標 或 沙塵暴觸發，實體護罩就必須是「關閉狀態」
-            if (isWindDanger || isDustDanger) {
-                shieldStatus.innerText = "已關閉 (防護中 🛡️)";
+            if (isWindDanger) {
+                shieldStatus.innerText = "已關閉 (防禦中 🛡️)";
                 shieldStatus.className = "status-warning";
             } else {
                 shieldStatus.innerText = "已開啟 (待機)";
                 shieldStatus.className = "status-safe";
             }
+
+            // 2. 窗戶本體邏輯 (受沙塵暴 或 降雨影響)
+            const windowStatusElements = document.querySelectorAll('.window-status');
+            if (isDustDanger || isRainDanger) {
+                windowStatusElements.forEach(el => {
+                    el.innerText = "已關閉 (防護中 🪟)";
+                    el.className = "status-warning";
+                });
+            } else {
+                windowStatusElements.forEach(el => {
+                    el.innerText = "已開啟 (通風)";
+                    el.className = "status-safe";
+                });
+            }
         }
 
         // ==========================================
-        // 按鈕專用事件：沙塵暴模擬
+        // 按鈕專用事件
         // ==========================================
         function simulateBadAir() {
             document.getElementById('aqi').innerText = "嚴重 ⚠️";
             document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
             document.getElementById('env-status').className = "status-warning";
-            
             document.getElementById('dust-alert').classList.add('show');
-            
             isDustDanger = true; 
-            updateShieldStatus(); 
+            updateDevicesStatus(); 
         }
 
         function stopSimulation() {
             document.getElementById('aqi').innerText = "良好";
             document.getElementById('env-status').innerText = "安全";
             document.getElementById('env-status').className = "status-safe";
-            
             document.getElementById('dust-alert').classList.remove('show');
-            
             isDustDanger = false; 
-            updateShieldStatus(); 
+            updateDevicesStatus(); 
         }
 
         // ==========================================
@@ -169,12 +172,11 @@
                 const data = await res.json();
                 document.getElementById('temp').innerText = data.temperature.data[1].value;
                 document.getElementById('humidity').innerText = data.humidity.data[0].value;
-                document.getElementById('hko-rain').innerText = (data.rainfall && data.rainfall.data[0].max > 0) ? "有雨 🌧️" : "無雨";
             } catch (e) { console.error(e); }
         }
 
         // ==========================================
-        // Micro:bit 序列埠讀取 (獨立處理風速)
+        // Micro:bit 序列埠讀取
         // ==========================================
         let port, reader, keepReading = false;
         const connectBtn = document.getElementById('connect-btn');
@@ -201,7 +203,8 @@
             disconnectBtn.disabled = true;
             
             isWindDanger = false; 
-            updateShieldStatus(); 
+            isRainDanger = false;
+            updateDevicesStatus(); 
         });
 
         async function readSerialData() {
@@ -223,12 +226,12 @@
                         let [key, valStr] = line.split(':');
                         let val = parseInt(valStr.trim());
 
+                        // 處理 P2 風速 (專門控制防護罩)
                         if (key === 'wind' && !isNaN(val)) {
                             document.getElementById('wind-raw').innerText = val;
                             let kmh = Math.round((val / 1023) * 100);
                             document.getElementById('wind-speed').innerText = kmh;
                             
-                            // 風速邏輯：不再呼叫紅色警報列，僅改變文字與內部狀態
                             if (val > 130) {
                                 document.getElementById('wind-status').innerText = "危險 (強風)";
                                 document.getElementById('wind-status').className = "status-warning";
@@ -238,8 +241,23 @@
                                 document.getElementById('wind-status').className = "status-safe";
                                 isWindDanger = false; 
                             }
+                            updateDevicesStatus();
+                        }
+                        
+                        // 處理 P1 水位 (專門控制窗戶)
+                        if (key === 'water' && !isNaN(val)) {
+                            document.getElementById('water-level').innerText = val;
                             
-                            updateShieldStatus();
+                            if (val > 400) {
+                                document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
+                                document.getElementById('rain-status').className = "status-warning";
+                                isRainDanger = true;
+                            } else {
+                                document.getElementById('rain-status').innerText = "安全 (乾燥)";
+                                document.getElementById('rain-status').className = "status-safe";
+                                isRainDanger = false;
+                            }
+                            updateDevicesStatus();
                         }
                     }
                 }
