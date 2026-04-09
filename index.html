@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧全方位防災護窗系統 v4.0</title>
+    <title>智慧全方位防災護窗系統 v4.1</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -41,14 +41,13 @@
         .status-safe { color: var(--success); font-weight: bold; }
         .status-warning { color: var(--danger); font-weight: bold; }
         
-        /* 設備狀態特別標示 */
-        .device-status { padding: 5px 10px; border-radius: 5px; background-color: #f8f9fa; display: inline-block; margin-top: 5px; border: 1px solid #dee2e6; }
+        .device-status { padding: 5px 10px; border-radius: 5px; background-color: #f8f9fa; display: inline-block; margin-top: 5px; border: 1px solid #dee2e6; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>智慧全方位防災護窗系統 <span class="version-tag">v4.0</span></h1>
+        <h1>智慧全方位防災護窗系統 <span class="version-tag">v4.1</span></h1>
         <div class="control-panel">
             <button id="connect-btn">🔌 連接 Micro:bit</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
@@ -67,14 +66,14 @@
             <h2>🌧️ 降雨與水位監測</h2>
             <p>P1 感應器數值: <span id="water-level" class="data-point">0</span></p>
             <p>環境狀態: <span id="rain-status" class="status-safe">安全 (乾燥)</span></p>
-            <div class="device-status">室內窗戶: <span class="window-status status-safe">已開啟 (通風)</span></div>
+            <div class="device-status">室內窗戶狀態: <span class="window-status status-safe">已開啟 (通風)</span></div>
         </div>
 
         <div class="card">
             <h2>💨 空氣與沙塵監測</h2>
             <p>空氣質素: <span id="aqi" class="data-point">良好</span></p>
             <p>環境狀態: <span id="env-status" class="status-safe">安全</span></p>
-            <div class="device-status">室內窗戶: <span class="window-status status-safe">已開啟 (通風)</span></div>
+            <div class="device-status">室內窗戶狀態: <span class="window-status status-safe">已開啟 (通風)</span></div>
             <div class="btn-group">
                 <button onclick="simulateBadAir()">模擬沙塵暴</button>
                 <button onclick="stopSimulation()" class="btn-danger">停止模擬</button>
@@ -87,7 +86,7 @@
             <p>P2 感應器數值: <span id="wind-raw" class="data-point">0</span></p>
             <p>換算風速: <span id="wind-speed" class="data-sub">0</span> km/h</p>
             <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
-            <div class="device-status">物理盾牌: <span id="shield-status" class="status-safe">已開啟 (待機)</span></div>
+            <div class="device-status">物理盾牌狀態: <span id="shield-status" class="status-safe">已開啟 (待機)</span></div>
         </div>
 
         <div class="card" id="maintenance-card">
@@ -121,6 +120,7 @@
             const windowStatusElements = document.querySelectorAll('.window-status');
             if (isDustDanger || isRainDanger) {
                 windowStatusElements.forEach(el => {
+                    // 同步更新所有標示室內窗戶的狀態為「已關閉」
                     el.innerText = "已關閉 (防護中 🪟)";
                     el.className = "status-warning";
                 });
@@ -153,9 +153,6 @@
             updateDevicesStatus(); 
         }
 
-        // ==========================================
-        // 保養與 API
-        // ==========================================
         let usageCount = 0;
         function simulateWindowUsage() {
             usageCount += 5;
@@ -244,11 +241,11 @@
                             updateDevicesStatus();
                         }
                         
-                        // 處理 P1 水位 (專門控制窗戶)
+                        // 處理 P1 水位 (大於 0 即視為下雨，控制室內窗戶)
                         if (key === 'water' && !isNaN(val)) {
                             document.getElementById('water-level').innerText = val;
                             
-                            if (val > 400) {
+                            if (val > 0) {
                                 document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
                                 document.getElementById('rain-status').className = "status-warning";
                                 isRainDanger = true;
