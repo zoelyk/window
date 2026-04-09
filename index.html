@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧全方位防災護窗系統 v3.0</title>
+    <title>智慧全方位防災護窗系統 v3.1</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -26,11 +26,11 @@
         .data-point { font-size: 2rem; font-weight: bold; margin: 10px 0; color: var(--primary); }
         .data-sub { font-size: 1.2rem; font-weight: bold; color: var(--secondary); }
         
-        /* 全新專屬卡片警報設計：預留空間，不會擠壓頁面排版 */
+        /* 專屬卡片警報設計 */
         .local-alert { 
             visibility: hidden; 
             opacity: 0; 
-            margin-top: auto; /* 自動推到卡片最底部 */
+            margin-top: auto; 
             padding: 10px; 
             background-color: var(--danger); 
             color: white; 
@@ -57,7 +57,7 @@
 <body>
 
     <header>
-        <h1>智慧全方位防災護窗系統 <span class="version-tag">v3.0</span></h1>
+        <h1>智慧全方位防災護窗系統 <span class="version-tag">v3.1</span></h1>
         <div class="control-panel">
             <button id="connect-btn">🔌 連接 Micro:bit</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
@@ -96,7 +96,6 @@
             <p>換算風速: <span id="wind-speed" class="data-sub">0</span> km/h</p>
             <p>環境狀態: <span id="wind-status" class="status-safe">安全 (微風)</span></p>
             <p>強風預警防禦: <span id="shield-status" class="status-safe">已開啟 (待機)</span></p>
-            <div id="wind-alert" class="local-alert">🌪️ 強風警報：物理盾牌已自動關閉！</div>
         </div>
 
         <div class="card" id="maintenance-card">
@@ -127,14 +126,13 @@
         }
 
         // ==========================================
-        // 按鈕專用事件：沙塵暴模擬 (完全獨立，不影響排版)
+        // 按鈕專用事件：沙塵暴模擬
         // ==========================================
         function simulateBadAir() {
             document.getElementById('aqi').innerText = "嚴重 ⚠️";
             document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
             document.getElementById('env-status').className = "status-warning";
             
-            // 讓專屬警報浮現 (使用 opacity，不擠壓頁面)
             document.getElementById('dust-alert').classList.add('show');
             
             isDustDanger = true; 
@@ -146,7 +144,6 @@
             document.getElementById('env-status').innerText = "安全";
             document.getElementById('env-status').className = "status-safe";
             
-            // 隱藏專屬警報
             document.getElementById('dust-alert').classList.remove('show');
             
             isDustDanger = false; 
@@ -204,7 +201,6 @@
             disconnectBtn.disabled = true;
             
             isWindDanger = false; 
-            document.getElementById('wind-alert').classList.remove('show');
             updateShieldStatus(); 
         });
 
@@ -232,16 +228,14 @@
                             let kmh = Math.round((val / 1023) * 100);
                             document.getElementById('wind-speed').innerText = kmh;
                             
-                            // 風速邏輯完全獨立
+                            // 風速邏輯：不再呼叫紅色警報列，僅改變文字與內部狀態
                             if (val > 130) {
                                 document.getElementById('wind-status').innerText = "危險 (強風)";
                                 document.getElementById('wind-status').className = "status-warning";
-                                document.getElementById('wind-alert').classList.add('show'); // 顯示風速專屬警報
                                 isWindDanger = true; 
                             } else {
                                 document.getElementById('wind-status').innerText = "安全 (微風)";
                                 document.getElementById('wind-status').className = "status-safe";
-                                document.getElementById('wind-alert').classList.remove('show'); // 隱藏風速專屬警報
                                 isWindDanger = false; 
                             }
                             
