@@ -103,7 +103,7 @@
         let isRainDanger = false;
         
         let usageCount = 0;
-        let lastCrushState = -1; // 用來追蹤 P8 前一次的狀態，避免重複計數
+        let lastCrushState = -1; 
 
         function updateDevicesStatus() {
             const shieldStatus = document.getElementById('shield-status');
@@ -242,11 +242,11 @@
                             updateDevicesStatus();
                         }
                         
-                        // 2. 處理水位 (S1 伺服馬達聯動)
+                        // 2. 處理水位
                         if (key === 'water' && !isNaN(val)) {
                             document.getElementById('water-level').innerText = val;
                             
-                            if (val > 100) { // 配合您的新代碼 > 100
+                            if (val > 100) { 
                                 document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
                                 document.getElementById('rain-status').className = "status-warning";
                                 isRainDanger = true;
@@ -258,5 +258,31 @@
                             updateDevicesStatus();
                         }
 
-                        // 3. 處理實體開關 (P8 Digital Read)
-                        if (key === 'crush' && !
+                        // 3. 處理實體開關 (P8)
+                        if (key === 'crush' && !isNaN(val)) {
+                            const crushStateEl = document.getElementById('crush-state');
+                            if (val === 0) {
+                                crushStateEl.innerText = "已關閉 🔒";
+                                crushStateEl.className = "status-warning";
+                            } else {
+                                crushStateEl.innerText = "已開啟 🔓";
+                                crushStateEl.className = "status-safe";
+                            }
+
+                            if (lastCrushState !== -1 && lastCrushState !== val) {
+                                if (val === 0) {
+                                    usageCount++;
+                                    checkMaintenanceAlert();
+                                }
+                            }
+                            lastCrushState = val;
+                        }
+                    }
+                }
+            }
+        }
+
+        window.onload = fetchHKOWeather;
+    </script>
+</body>
+</html>
