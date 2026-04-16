@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧全方位防災護窗系統 (雙主機版)</title>
+    <title>智慧全方位防災護窗系統 (實體感測版)</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -42,7 +42,7 @@
 <body>
 
     <header>
-        <h1>智慧全方位防災護窗系統 <span class="version-tag">雙主機感測版</span></h1>
+        <h1>智慧全方位防災護窗系統 <span class="version-tag">實體感測版</span></h1>
         <div class="control-panel">
             <button id="connect-btn">🔌 連接 Micro:bit (請接發送端)</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
@@ -61,14 +61,14 @@
             <h2>🌧️ 降雨與水位監測</h2>
             <p>P1 感應器數值: <span id="water-level" class="data-point">0</span></p>
             <p>環境狀態: <span id="rain-status" class="status-safe">安全 (乾燥)</span></p>
-            <div class="device-status">室內窗戶狀態: <span class="window-status status-safe">已開啟 (通風)</span></div>
+            <div class="device-status">室內窗戶指令: <span class="window-status status-safe">保持開啟</span></div>
         </div>
 
         <div class="card">
             <h2>💨 空氣與沙塵監測</h2>
             <p>空氣質素: <span id="aqi" class="data-point">良好</span></p>
             <p>環境狀態: <span id="env-status" class="status-safe">安全</span></p>
-            <div class="device-status">室內窗戶狀態: <span class="window-status status-safe">已開啟 (通風)</span></div>
+            <div class="device-status">室內窗戶指令: <span class="window-status status-safe">保持開啟</span></div>
             <div class="btn-group">
                 <button onclick="simulateBadAir()">模擬沙塵暴</button>
                 <button onclick="stopSimulation()" class="btn-danger">停止模擬</button>
@@ -86,9 +86,11 @@
 
         <div class="card" id="maintenance-card">
             <h2>⚙️ 系統保養報告 (週報)</h2>
-            <p>本週開關次數: <span id="usage-count" class="data-point">0</span> 次</p>
+            <div class="device-status" style="margin-bottom: 10px;">實體窗戶感測 (P8): <span id="crush-state" class="status-safe">讀取中...</span></div>
+            
+            <p>本週累計開關: <span id="usage-count" class="data-point">0</span> 次</p>
             <p id="maintenance-msg">系統狀態良好。</p>
-            <button onclick="simulateWindowUsage()">模擬開關 (+5)</button>
+            <button onclick="simulateWindowUsage()">手動測試 (+5)</button>
         </div>
     </div>
 
@@ -99,6 +101,9 @@
         let isWindDanger = false;
         let isDustDanger = false;
         let isRainDanger = false;
+        
+        let usageCount = 0;
+        let lastCrushState = -1; // 用來追蹤 P8 前一次的狀態，避免重複計數
 
         function updateDevicesStatus() {
             const shieldStatus = document.getElementById('shield-status');
@@ -113,12 +118,12 @@
             const windowStatusElements = document.querySelectorAll('.window-status');
             if (isDustDanger || isRainDanger) {
                 windowStatusElements.forEach(el => {
-                    el.innerText = "已關閉 (防護中 🪟)";
+                    el.innerText = "觸發關閉 (防護中 🪟)";
                     el.className = "status-warning";
                 });
             } else {
                 windowStatusElements.forEach(el => {
-                    el.innerText = "已開啟 (通風)";
+                    el.innerText = "保持開啟 (通風)";
                     el.className = "status-safe";
                 });
             }
@@ -143,14 +148,17 @@
             isDustDanger = false; updateDevicesStatus(); 
         }
 
-        let usageCount = 0;
-        function simulateWindowUsage() {
-            usageCount += 5;
+        function checkMaintenanceAlert() {
             document.getElementById('usage-count').innerText = usageCount;
             if (usageCount >= 20) {
                 document.getElementById('maintenance-card').style.backgroundColor = 'var(--warning)';
-                document.getElementById('maintenance-msg').innerText = "⚠️ 警告：開關過於頻繁，請進行保養！";
+                document.getElementById('maintenance-msg').innerText = "⚠️ 警告：開關過於頻繁 (達到20次)，請檢查軌道與齒輪進行保養！";
             }
+        }
+
+        function simulateWindowUsage() {
+            usageCount += 5;
+            checkMaintenanceAlert();
         }
 
         async function fetchHKOWeather() {
@@ -163,7 +171,7 @@
         }
 
         // ==========================================
-        // USB 序列埠通訊設定 (搭配您的 Send side code)
+        // USB 序列埠通訊
         // ==========================================
         let port, reader, keepReading = false;
         const connectBtn = document.getElementById('connect-btn');
@@ -191,6 +199,9 @@
             
             isWindDanger = false; 
             isRainDanger = false;
+            document.getElementById('crush-state').innerText = "讀取中...";
+            document.getElementById('crush-state').className = "status-safe";
+            lastCrushState = -1;
             updateDevicesStatus(); 
         });
 
@@ -213,7 +224,7 @@
                         let [key, valStr] = line.split(':');
                         let val = parseInt(valStr.trim());
 
-                        // 處理 P2 風速 (同步您的代碼設定為 > 100 觸發)
+                        // 1. 處理風速
                         if (key === 'wind' && !isNaN(val)) {
                             document.getElementById('wind-raw').innerText = val;
                             let kmh = Math.round((val / 1023) * 100);
@@ -231,11 +242,11 @@
                             updateDevicesStatus();
                         }
                         
-                        // 處理 P1 水位 (維持 > 0 觸發)
+                        // 2. 處理水位 (S1 伺服馬達聯動)
                         if (key === 'water' && !isNaN(val)) {
                             document.getElementById('water-level').innerText = val;
                             
-                            if (val > 0) {
+                            if (val > 100) { // 配合您的新代碼 > 100
                                 document.getElementById('rain-status').innerText = "危險 (積水/下雨)";
                                 document.getElementById('rain-status').className = "status-warning";
                                 isRainDanger = true;
@@ -246,12 +257,6 @@
                             }
                             updateDevicesStatus();
                         }
-                    }
-                }
-            }
-        }
 
-        window.onload = fetchHKOWeather;
-    </script>
-</body>
-</html>
+                        // 3. 處理實體開關 (P8 Digital Read)
+                        if (key === 'crush' && !
