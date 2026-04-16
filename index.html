@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧全方位防災護窗系統 v4.1</title>
+    <title>智慧全方位防災護窗系統 (雙主機版)</title>
     <style>
         :root {
             --bg-color: #f4f7f6;
@@ -18,38 +18,33 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         h1 { color: var(--primary); }
-        .version-tag { font-size: 0.5em; color: var(--secondary); vertical-align: middle; }
-        .control-panel { background-color: #e9ecef; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 20px; }
+        .version-tag { font-size: 0.5em; color: var(--secondary); vertical-align: middle; background: #e2e8f0; padding: 2px 8px; border-radius: 10px;}
+        .control-panel { background-color: #e9ecef; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 20px; border: 2px solid #007bff; }
         .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
         .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .card h2 { margin-top: 0; font-size: 1.2rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
         .data-point { font-size: 2rem; font-weight: bold; margin: 10px 0; color: var(--primary); }
         .data-sub { font-size: 1.2rem; font-weight: bold; color: var(--secondary); }
         
-        .local-alert { 
-            visibility: hidden; opacity: 0; margin-top: auto; padding: 10px; 
-            background-color: var(--danger); color: white; text-align: center; 
-            border-radius: 8px; font-weight: bold; font-size: 1rem; transition: opacity 0.3s ease;
-        }
+        .local-alert { visibility: hidden; opacity: 0; margin-top: auto; padding: 10px; background-color: var(--danger); color: white; text-align: center; border-radius: 8px; font-weight: bold; font-size: 1rem; transition: opacity 0.3s ease; }
         .local-alert.show { visibility: visible; opacity: 1; }
 
-        button { background-color: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-top: 5px; }
+        button { background-color: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-top: 5px; font-weight: bold;}
         button:hover { background-color: #0056b3; }
         button:disabled { background-color: var(--secondary); cursor: not-allowed; }
         .btn-group { display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px; }
         .btn-danger { background-color: var(--danger); }
         .status-safe { color: var(--success); font-weight: bold; }
         .status-warning { color: var(--danger); font-weight: bold; }
-        
         .device-status { padding: 5px 10px; border-radius: 5px; background-color: #f8f9fa; display: inline-block; margin-top: 5px; border: 1px solid #dee2e6; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>智慧全方位防災護窗系統 <span class="version-tag">v4.1</span></h1>
+        <h1>智慧全方位防災護窗系統 <span class="version-tag">雙主機感測版</span></h1>
         <div class="control-panel">
-            <button id="connect-btn">🔌 連接 Micro:bit</button>
+            <button id="connect-btn">🔌 連接 Micro:bit (請接發送端)</button>
             <button id="disconnect-btn" disabled>🛑 斷開連接</button>
             <span id="connection-status" style="margin-left: 10px; font-weight: bold; color: var(--secondary);">未連接</span>
         </div>
@@ -99,14 +94,13 @@
 
     <script>
         // ==========================================
-        // 核心邏輯：設備狀態分離管理器
+        // 核心邏輯：狀態與 UI 更新
         // ==========================================
         let isWindDanger = false;
         let isDustDanger = false;
         let isRainDanger = false;
 
         function updateDevicesStatus() {
-            // 1. 防護罩邏輯 (只受強風影響)
             const shieldStatus = document.getElementById('shield-status');
             if (isWindDanger) {
                 shieldStatus.innerText = "已關閉 (防禦中 🛡️)";
@@ -116,11 +110,9 @@
                 shieldStatus.className = "status-safe";
             }
 
-            // 2. 窗戶本體邏輯 (受沙塵暴 或 降雨影響)
             const windowStatusElements = document.querySelectorAll('.window-status');
             if (isDustDanger || isRainDanger) {
                 windowStatusElements.forEach(el => {
-                    // 同步更新所有標示室內窗戶的狀態為「已關閉」
                     el.innerText = "已關閉 (防護中 🪟)";
                     el.className = "status-warning";
                 });
@@ -133,15 +125,14 @@
         }
 
         // ==========================================
-        // 按鈕專用事件
+        // 模擬按鈕與 API
         // ==========================================
         function simulateBadAir() {
             document.getElementById('aqi').innerText = "嚴重 ⚠️";
             document.getElementById('env-status').innerText = "危險 (懸浮粒子過高)";
             document.getElementById('env-status').className = "status-warning";
             document.getElementById('dust-alert').classList.add('show');
-            isDustDanger = true; 
-            updateDevicesStatus(); 
+            isDustDanger = true; updateDevicesStatus(); 
         }
 
         function stopSimulation() {
@@ -149,8 +140,7 @@
             document.getElementById('env-status').innerText = "安全";
             document.getElementById('env-status').className = "status-safe";
             document.getElementById('dust-alert').classList.remove('show');
-            isDustDanger = false; 
-            updateDevicesStatus(); 
+            isDustDanger = false; updateDevicesStatus(); 
         }
 
         let usageCount = 0;
@@ -173,7 +163,7 @@
         }
 
         // ==========================================
-        // Micro:bit 序列埠讀取
+        // USB 序列埠通訊設定 (搭配您的 Send side code)
         // ==========================================
         let port, reader, keepReading = false;
         const connectBtn = document.getElementById('connect-btn');
@@ -223,13 +213,13 @@
                         let [key, valStr] = line.split(':');
                         let val = parseInt(valStr.trim());
 
-                        // 處理 P2 風速 (專門控制防護罩)
+                        // 處理 P2 風速 (同步您的代碼設定為 > 100 觸發)
                         if (key === 'wind' && !isNaN(val)) {
                             document.getElementById('wind-raw').innerText = val;
                             let kmh = Math.round((val / 1023) * 100);
                             document.getElementById('wind-speed').innerText = kmh;
                             
-                            if (val > 130) {
+                            if (val > 100) {
                                 document.getElementById('wind-status').innerText = "危險 (強風)";
                                 document.getElementById('wind-status').className = "status-warning";
                                 isWindDanger = true; 
@@ -241,7 +231,7 @@
                             updateDevicesStatus();
                         }
                         
-                        // 處理 P1 水位 (大於 0 即視為下雨，控制室內窗戶)
+                        // 處理 P1 水位 (維持 > 0 觸發)
                         if (key === 'water' && !isNaN(val)) {
                             document.getElementById('water-level').innerText = val;
                             
